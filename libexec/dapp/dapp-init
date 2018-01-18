@@ -24,7 +24,7 @@ insert .gitignore <<.
 .
 
 name=$(basename "$(pwd)")
-name=$(<<<"$name" tr A-Z a-z)
+name=$(<<<"$name" tr '[:upper:]' '[:lower:]')
 nouns=(${name//[^a-z]/ })
 noun=${nouns[$((${#nouns[@]} - 1))]}
 type=$(<<<"$name" perl -pe 's/(\w+)/\u$1/g')
@@ -36,15 +36,6 @@ all    :; dapp build
 clean  :; dapp clean
 test   :; dapp test
 deploy :; dapp create $type
-.
-
-create Dappfile <<.
-name            $name
-description     A newly-created dapp
-version         0.0.0
-
-author          $(whoami)
-license         Apache-2.0
 .
 
 create "src/$type.sol" <<.
@@ -64,16 +55,16 @@ import "./$type.sol";
 contract ${type}Test is DSTest {
     $type $noun;
 
-    function setUp() {
+    function setUp() public {
         $noun = new $type();
     }
 
-    function testFail_basic_sanity() {
-        assert(false);
+    function testFail_basic_sanity() public {
+        assertTrue(false);
     }
 
-    function test_basic_sanity() {
-        assert(true);
+    function test_basic_sanity() public {
+        assertTrue(true);
     }
 }
 .
