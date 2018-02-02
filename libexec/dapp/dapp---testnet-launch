@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/nix/store/4sp0sc2wxas7213x59smrwhliqmhc5yk-bash-4.4-p12/bin/bash
 set -e
 
 OPTS="dapp testnet [<options>] <args>...
@@ -7,9 +7,9 @@ dapp testnet --help
 rpc-port=port      change RPC port (default: 8545)
 chain-id=number    change chain ID (default: 99)
 period=seconds     use a block time instead of instamine
-accounts=number    create multiple accounts (default: 1)
 save=name          after finishing, save snapshot
 load=name          start from a previously saved snapshot
+rpc-host=host      change RPC host (default: \`localhost')
 "
 
 eval "$(
@@ -19,18 +19,17 @@ eval "$(
 RPC_PORT=8545
 PERIOD=0
 CHAINID=99
-ACCOUNTS=0
 
 while [[ $1 ]]; do
   case $1 in
     --)          shift; break;;
     --rpc-port)  shift; RPC_PORT=$1;;
+    --rpc-host)   shift; RPC_HOST=$1;;
     --chain-id)  shift; CHAINID=$1;;
     --period)    shift; PERIOD=$1;;
-    --accounts)  shift; ACCOUNTS=$(($1 - 1));;
     --save)      shift; SAVE=$1;;
     --load)      shift; LOAD=$1;;
-    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
+    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift
 done
 
@@ -42,7 +41,7 @@ if [[ $LOAD ]]; then
   cp -r "$gethdir/snapshots/$LOAD"/{keystore,config} "$chaindir"
   geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
   geth >/dev/null 2>&1 --datadir "$chaindir" import "$gethdir/snapshots/$LOAD/backup"
-  address+=( "$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")" )
+  address=$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")
   CHAINID=$(jq <"$chaindir/config/genesis.json" -r ".config.chainId")
 else
   while true; do
@@ -51,13 +50,9 @@ else
   done
 
   mkdir -p "$chaindir/config"
-  for i in $(seq 0 "$ACCOUNTS"); do
-    address+=( "$(
-      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
-        | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
-    balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
-      -i "${address[i]}")
-  done
+  address=$(
+    geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+      | grep Address | sed 's/Address: {\(.*\)}/\1/')
   jshon >"$chaindir/config/genesis.json" \
     -n {} \
     -n {} \
@@ -70,14 +65,15 @@ else
       -i config \
     -s 0x1 -i difficulty \
     -s 0xffffffffffffffff -i gaslimit \
-    -s "0x3132333400000000000000000000000000000000000000000000000000000000""${address[0]}""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
+    -s "0x3132333400000000000000000000000000000000000000000000000000000000""$address""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
     -n {} \
-      "${balance[@]}" \
+      -n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
+      -i "$address" \
     -i alloc
   geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
 fi
 
-export ETH_RPC_URL=http://127.0.0.1:$RPC_PORT
+export ETH_RPC_URL=http://${RPC_HOST-localhost}:$RPC_PORT
 
 port=$((RPC_PORT + 30000))
 
@@ -87,17 +83,18 @@ echo >&2 "dapp-testnet:  Chain ID: $CHAINID"
 echo >&2 "dapp-testnet:  Database: $chaindir"
 echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
-echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
-echo "$port"                  > "$chaindir/config/node-port"
+echo "$address"     > "$chaindir/config/account"
+echo "$ETH_RPC_URL" > "$chaindir/config/rpc-url"
+echo "$port"        > "$chaindir/config/node-port"
 
 set +m
 geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
+  --rpcaddr "${RPC_HOST-localhost}" \
   --mine --minerthreads=1 \
-  --rpc --rpcapi "web3,eth,net,debug" --rpccorsdomain '*' --nodiscover \
-  --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
+  --rpc --rpcapi "web3,eth,net,debug" --rpccorsdomain '*' \
+  --rpcport="$RPC_PORT" --unlock="$address" --password=<(exit) &
 
 gethpid=$!
 
@@ -121,8 +118,7 @@ ETH_FROM=$(seth rpc eth_coinbase)
 export ETH_FROM
 export ETH_KEYSTORE=$chaindir/keystore
 export ETH_PASSWORD=/dev/null
-printf 'dapp-testnet:   Account: %s (default)\n' "${address[0]}" >&2
-[[ "${#address[@]}" -gt 1 ]] && printf 'dapp-testnet:   Account: %s\n' "${address[@]:1}" >&2
+echo >&2 "dapp-testnet:   Account: $ETH_FROM"
 
 if [[ $1 ]]; then
   "$@"
