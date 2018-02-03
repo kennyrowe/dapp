@@ -54,10 +54,11 @@ else
 
   mkdir -p "$chaindir/config"
   for i in $(seq 0 "$ACCOUNTS"); do
-    address+=( "$(geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
-      | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
+    address+=( "$(
+      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+        | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
-      -i "${address[i]}") 
+      -i "${address[i]}")
   done
   jshon >"$chaindir/config/genesis.json" \
     -n {} \
