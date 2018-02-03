@@ -88,9 +88,9 @@ echo >&2 "dapp-testnet:  Chain ID: $CHAINID"
 echo >&2 "dapp-testnet:  Database: $chaindir"
 echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-printf "%s\\n" "${address[@]}"  > "$chaindir/config/account"
-echo "$ETH_RPC_URL"             > "$chaindir/config/rpc-url"
-echo "$port"                    > "$chaindir/config/node-port"
+printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
+echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
+echo "$port"                  > "$chaindir/config/node-port"
 
 set +m
 geth \
@@ -99,7 +99,7 @@ geth \
   --rpcaddr "${RPC_HOST-localhost}" \
   --mine --minerthreads=1 \
   --rpc --rpcapi "web3,eth,net,debug" --rpccorsdomain '*' \
-  --rpcport="$RPC_PORT" --unlock=(IFS=,; echo "${address[*]}") --password=<(exit) &
+  --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
 
 gethpid=$!
 
@@ -124,8 +124,7 @@ export ETH_FROM
 export ETH_KEYSTORE=$chaindir/keystore
 export ETH_PASSWORD=/dev/null
 printf 'dapp-testnet:   Account: %s (default)\n' "${address[0]}" >&2
--[[ "${#address[@]}" -gt 1 ]] && printf 'dapp-testnet:   Account: %s\n'
-"${address[@]:1}" >&2
+[[ "${#address[@]}" -gt 1 ]] && printf 'dapp-testnet:   Account: %s\n' "${address[@]:1}" >&2
 
 if [[ $1 ]]; then
   "$@"
